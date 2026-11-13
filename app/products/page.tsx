@@ -175,6 +175,7 @@ export default async function ProductsPage({
                   currentPage >= pageInfo.total_pages ? 'pointer-events-none opacity-50' : ''
                 }`}
               >
+                
                 Next
               </a>
             </div>
