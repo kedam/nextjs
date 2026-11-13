@@ -1,10 +1,12 @@
-// app/components/MiniCartDrawer.tsx
+// app/components/MiniCartDrawer.tsx (Checkout Button update)
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation'; // 1. Import useRouter
 import { getCartDetailsAction } from '@/app/actions/cart';
 
 export default function MiniCartDrawer() {
+  const router = useRouter(); // 2. Initialize router
   const [isOpen, setIsOpen] = useState(false);
   const [items, setItems] = useState<any[]>([]);
   const [totalQuantity, setTotalQuantity] = useState(0);
@@ -105,8 +107,12 @@ export default function MiniCartDrawer() {
                     {grandTotal?.value} {grandTotal?.currency}
                   </span>
                 </div>
+                {/* 3. Navigate to checkout on click */}
                 <button
-                  onClick={() => alert('Proceeding to checkout workflow...')}
+                  onClick={() => {
+                    setIsOpen(false);
+                    router.push('/checkout');
+                  }}
                   className="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-3 rounded-xl transition shadow-lg cursor-pointer text-center"
                 >
                   Proceed to Checkout
