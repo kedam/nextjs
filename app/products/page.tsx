@@ -1,6 +1,4 @@
 // app/products/page.tsx
-export const dynamic = 'force-dynamic'; // <-- Forces dynamic runtime rendering instead of static prerendering
-
 import { Suspense } from 'react';
 import ProductCard from './ProductCard';
 import MiniCartDrawer from '@/app/components/MiniCartDrawer';
@@ -175,7 +173,6 @@ export default async function ProductsPage({
                   currentPage >= pageInfo.total_pages ? 'pointer-events-none opacity-50' : ''
                 }`}
               >
-                
                 Next
               </a>
             </div>
