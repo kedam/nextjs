@@ -1,4 +1,6 @@
 // app/products/page.tsx
+export const dynamic = 'force-dynamic'; // <-- Forces dynamic runtime rendering instead of static prerendering
+
 import { Suspense } from 'react';
 import ProductCard from './ProductCard';
 import MiniCartDrawer from '@/app/components/MiniCartDrawer';
@@ -139,7 +141,7 @@ export default async function ProductsPage({
 
         {items.length === 0 ? (
           <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-xl text-center text-zinc-400 mt-6">
-            Unable to load products from Magento GraphQL endpoint.
+            Unable to load products from Magento GraphQL endpoint. Please verify your Magento backend is running and `MAGENTO_GRAPHQL_URL` is correct.
           </div>
         ) : (
           <>
