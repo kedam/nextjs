@@ -20,7 +20,10 @@ interface PageInfo {
   page_size: number;
 }
 
-async function getProducts(page: number, pageSize: number = 6): Promise<{ items: Product[]; pageInfo: PageInfo }> {
+async function getProducts(
+  page: number,
+  pageSize: number = 6
+): Promise<{ items: Product[]; pageInfo: PageInfo }> {
   const query = `
     query GetPaginatedProducts($currentPage: Int!, $pageSize: Int!) {
       products(search: "", pageSize: $pageSize, currentPage: $currentPage) {
@@ -52,7 +55,11 @@ async function getProducts(page: number, pageSize: number = 6): Promise<{ items:
     const json = await res.json();
     return {
       items: json?.data?.products?.items || [],
-      pageInfo: json?.data?.products?.page_info || { current_page: 1, total_pages: 1, page_size: pageSize },
+      pageInfo: json?.data?.products?.page_info || {
+        current_page: 1,
+        total_pages: 1,
+        page_size: pageSize,
+      },
     };
   } catch (error) {
     console.error('Failed to fetch from Magento GraphQL endpoint:', error);
@@ -63,10 +70,16 @@ async function getProducts(page: number, pageSize: number = 6): Promise<{ items:
   }
 }
 
-// ProductGrid safely awaits searchParams inside a Suspense boundary
-async function ProductGrid({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
+async function ProductGrid({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const resolvedParams = await searchParams;
-  const currentPage = Number(resolvedParams?.page) || 1;
+  const pageParam = Array.isArray(resolvedParams?.page)
+    ? resolvedParams.page[0]
+    : resolvedParams?.page;
+  const currentPage = Number(pageParam) || 1;
   const pageSize = 6;
 
   const { items: products, pageInfo } = await getProducts(currentPage, pageSize);
@@ -91,12 +104,19 @@ async function ProductGrid({ searchParams }: { searchParams: Promise<{ page?: st
           const imageUrl = product.small_image?.url || 'https://via.placeholder.com/300';
 
           return (
-            <div key={product.sku} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-lg flex flex-col justify-between">
+            <div
+              key={product.sku}
+              className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-lg flex flex-col justify-between"
+            >
               <div>
                 <div className="w-full h-48 bg-zinc-800 relative overflow-hidden">
-                  <img src={imageUrl} alt={product.name} className="object-cover w-full h-full hover:scale-105 transition duration-300" />
+                  <img
+                    src={imageUrl}
+                    alt={product.name}
+                    className="object-cover w-full h-full hover:scale-105 transition duration-300"
+                  />
                 </div>
-                
+
                 <div className="p-5">
                   <h2 className="text-lg font-semibold mb-1 line-clamp-1">{product.name}</h2>
                   <p className="text-zinc-400 text-xs mb-3">SKU: {product.sku}</p>
@@ -141,4 +161,16 @@ async function ProductGrid({ searchParams }: { searchParams: Promise<{ page?: st
   );
 }
 
-// Products
+export default function ProductsPage(props: PageProps<'/products'>) {
+  return (
+    <main className="min-h-screen bg-zinc-950 text-white p-8">
+      <div className="max-w-5xl mx-auto">
+        <h1 className="text-3xl font-bold mb-2 text-blue-400">Magento Venia Catalog</h1>
+
+        <Suspense fallback={<div className="text-zinc-400 py-12 text-center">Loading catalog products...</div>}>
+      
+        </Suspense>
+      </div>
+    </main>
+  );
+}
