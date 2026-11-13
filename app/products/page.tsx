@@ -1,4 +1,5 @@
 // app/products/page.tsx
+import { connection } from 'next/server'; // <-- Required for dynamic runtime under cacheComponents
 import { Suspense } from 'react';
 import ProductCard from './ProductCard';
 import MiniCartDrawer from '@/app/components/MiniCartDrawer';
@@ -103,7 +104,12 @@ async function getProducts(page: number, pageSize: number = 6): Promise<{ items:
       cache: 'no-store',
     });
 
-    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    if (!res.ok) {
+      return {
+        items: [],
+        pageInfo: { current_page: page, total_pages: 1, page_size: pageSize },
+      };
+    }
 
     const json = await res.json();
     return {
@@ -111,7 +117,7 @@ async function getProducts(page: number, pageSize: number = 6): Promise<{ items:
       pageInfo: json?.data?.products?.page_info || { current_page: 1, total_pages: 1, page_size: pageSize },
     };
   } catch (error) {
-    console.error('Failed to fetch from Magento GraphQL endpoint:', error);
+    // Graceful fallback during build if Magento GraphQL is unreachable
     return {
       items: [],
       pageInfo: { current_page: page, total_pages: 1, page_size: pageSize },
@@ -124,6 +130,8 @@ export default async function ProductsPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
+  await connection(); // <-- Forces Next.js to render at runtime instead of prerendering at build time
+
   const resolvedParams = await searchParams;
   const pageParam = Array.isArray(resolvedParams?.page) ? resolvedParams.page[0] : resolvedParams?.page;
   const currentPage = Number(pageParam) || 1;
@@ -139,7 +147,7 @@ export default async function ProductsPage({
 
         {items.length === 0 ? (
           <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-xl text-center text-zinc-400 mt-6">
-            Unable to load products from Magento GraphQL endpoint. Please verify your Magento backend is running and `MAGENTO_GRAPHQL_URL` is correct.
+            Unable to connect to Magento GraphQL endpoint at `{config.magentoGraphqlUrl}`. Please ensure your Magento backend is running.
           </div>
         ) : (
           <>
