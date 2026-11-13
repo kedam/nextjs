@@ -1,5 +1,6 @@
 // app/products/page.tsx
-import { connection } from 'next/server'; // <-- Required for dynamic runtime under cacheComponents
+export const instant = false; // Exempts this segment from instant-navigation validation under Next.js 16 Cache Components
+
 import { Suspense } from 'react';
 import ProductCard from './ProductCard';
 import MiniCartDrawer from '@/app/components/MiniCartDrawer';
@@ -117,7 +118,6 @@ async function getProducts(page: number, pageSize: number = 6): Promise<{ items:
       pageInfo: json?.data?.products?.page_info || { current_page: 1, total_pages: 1, page_size: pageSize },
     };
   } catch (error) {
-    // Graceful fallback during build if Magento GraphQL is unreachable
     return {
       items: [],
       pageInfo: { current_page: page, total_pages: 1, page_size: pageSize },
@@ -130,8 +130,6 @@ export default async function ProductsPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  await connection(); // <-- Forces Next.js to render at runtime instead of prerendering at build time
-
   const resolvedParams = await searchParams;
   const pageParam = Array.isArray(resolvedParams?.page) ? resolvedParams.page[0] : resolvedParams?.page;
   const currentPage = Number(pageParam) || 1;
