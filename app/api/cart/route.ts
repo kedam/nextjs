@@ -2,86 +2,137 @@
 import { NextResponse } from 'next/server';
 import { config } from '@/lib/config';
 
-export async function POST(request: Request) {
-  try {
-    const { sku, cartId } = await request.json();
-    let activeCartId = cartId;
+const MAGENTO_HEADERS = {
+  'Content-Type': 'application/json',
+  'Store': 'default',
+};
 
-    // 1. Create an empty cart if none exists
-    if (!activeCartId) {
-      const createCartRes = await fetch(config.magentoGraphqlUrl, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Store': 'default', // Helpful header for Magento multi-store context
-        },
-        body: JSON.stringify({ query: 'mutation { createEmptyCart }' }),
-      });
+async function createCart(graphqlUrl: string): Promise<string | null> {
+  const res = await fetch(graphqlUrl, {
+    method: 'POST',
+    headers: MAGENTO_HEADERS,
+    body: JSON.stringify({ query: 'mutation { createEmptyCart }' }),
+  });
+  const json = await res.json();
+  return json?.data?.createEmptyCart || null;
+}
 
-      const responseText = await createCartRes.text();
-      console.log('Magento createEmptyCart raw response:', responseText);
-
-      if (!responseText || responseText.trim() === '') {
-        return NextResponse.json({ success: false, error: 'Magento returned an empty response when creating cart.' }, { status: 502 });
-      }
-
-      const createCartJson = JSON.parse(responseText);
-
-      // Check if Magento returned GraphQL errors
-      if (createCartJson.errors) {
-        console.error('Magento GraphQL Errors on createEmptyCart:', createCartJson.errors);
-        return NextResponse.json({ 
-          success: false, 
-          error: createCartJson.errors[0]?.message || 'Magento cart creation failed.' 
-        }, { status: 400 });
-      }
-
-      activeCartId = createCartJson?.data?.createEmptyCart;
-
-      if (!activeCartId) {
-        return NextResponse.json({ success: false, error: 'Could not retrieve cart ID from Magento response.' }, { status: 400 });
-      }
-    }
-
-    // 2. Add product to the cart
-    const addQuery = `
-      mutation AddProductsToCart($cartId: String!, $sku: String!) {
-        addProductsToCart(
-          cartId: $cartId
-          cartItems: [{ data: { sku: $sku, quantity: 1 } }]
-        ) {
-          cart {
-            items {
-              product {
-                name
+async function addConfigurableToCart(
+  graphqlUrl: string,
+  cartId: string,
+  parentSku: string,
+  childSku: string
+) {
+  const mutation = `
+    mutation AddConfigurableProductsToCart(
+      $cartId: String!
+      $parentSku: String!
+      $childSku: String!
+    ) {
+      addConfigurableProductsToCart(
+        input: {
+          cart_id: $cartId
+          cart_items: [
+            {
+              parent_sku: $parentSku
+              data: {
+                sku: $childSku
+                quantity: 1
               }
-              quantity
             }
+          ]
+        }
+      ) {
+        cart {
+          total_quantity
+          items {
+            id
+            quantity
+            product { name sku }
+          }
+          prices {
+            grand_total { value currency }
           }
         }
       }
-    `;
+    }
+  `;
 
-    const addRes = await fetch(config.magentoGraphqlUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: addQuery,
-        variables: { cartId: activeCartId, sku },
-      }),
-    });
+  const res = await fetch(graphqlUrl, {
+    method: 'POST',
+    headers: MAGENTO_HEADERS,
+    body: JSON.stringify({
+      query: mutation,
+      variables: {
+        cartId,
+        parentSku,
+        childSku,
+      },
+    }),
+  });
 
-    const addResponseText = await addRes.text();
-    const addJson = JSON.parse(addResponseText);
+  return await res.json();
+}
 
-    if (addJson.errors) {
-      console.error('Magento GraphQL Errors on addProductsToCart:', addJson.errors);
-      return NextResponse.json({ success: false, error: addJson.errors[0].message }, { status: 400 });
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    let { parentSku, childSku, cartId } = body;
+
+    if (!parentSku || !childSku) {
+      return NextResponse.json({ success: false, error: 'Parent SKU and Child SKU are required' }, { status: 400 });
     }
 
-    return NextResponse.json({ success: true, cartId: activeCartId });
+    if (!cartId || cartId === 'null' || cartId === 'undefined') {
+      cartId = await createCart(config.magentoGraphqlUrl);
+    }
+
+    if (!cartId) {
+      return NextResponse.json({ success: false, error: 'Could not create cart ID.' }, { status: 400 });
+    }
+
+    let addResponse = await addConfigurableToCart(
+      config.magentoGraphqlUrl,
+      cartId,
+      parentSku,
+      childSku
+    );
+
+    if (
+      addResponse.errors &&
+      addResponse.errors.some(
+        (e: any) =>
+          e.message.includes('NoSuchEntity') ||
+          e.message.includes('cart') ||
+          e.message.includes('ID')
+      )
+    ) {
+      const newCartId = await createCart(config.magentoGraphqlUrl);
+      if (newCartId) {
+        cartId = newCartId;
+        addResponse = await addConfigurableToCart(
+          config.magentoGraphqlUrl,
+          cartId,
+          parentSku,
+          childSku
+        );
+      }
+    }
+
+    if (addResponse.errors) {
+      return NextResponse.json({ success: false, error: addResponse.errors[0].message }, { status: 400 });
+    }
+
+    const cartData = addResponse?.data?.addConfigurableProductsToCart?.cart;
+
+    return NextResponse.json({
+      success: true,
+      cartId,
+      totalQuantity: cartData?.total_quantity || 0,
+      items: cartData?.items || [],
+      grandTotal: cartData?.prices?.grand_total || null,
+    });
   } catch (err: any) {
-    console.error('API cart route catch error:', err);
     return NextResponse.json({ success: false, error: err.message || 'Internal server error' }, { status: 500 });
   }
 }
